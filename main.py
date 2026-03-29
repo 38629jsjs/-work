@@ -28,38 +28,53 @@ def fast_post(token, content):
 # ==========================================
 def worker_task(token):
     """The actual grind logic for a single account"""
+    # Check if we should still be farming before each action
+    if not is_farming: return 
+    
     fast_post(token, "!work")
-    time.sleep(random.uniform(1.5, 2.5)) # Fast wait
+    time.sleep(random.uniform(1.5, 2.5)) 
+    
+    if not is_farming: return
     fast_post(token, "!dep all")
 
 def farmer_loop():
     time.sleep(5)
-    FULL_SQUAD = [MAIN_TOKEN] + ALTS 
-    
+    # Move this inside the loop so it stays fresh
     while True:
         try:
             if is_farming:
+                FULL_SQUAD = [MAIN_TOKEN] + ALTS 
                 now = datetime.now(KH_TZ).strftime('%I:%M:%S %p')
                 print(f"🚀 [{now}] --- TURBO GRIND STARTING ---")
                 
                 threads = []
                 for t in FULL_SQUAD:
-                    # Fire off all accounts at once using threads
+                    # If you stopped it mid-loop, don't start new threads
+                    if not is_farming: break
+                    
                     thread = threading.Thread(target=worker_task, args=(t,))
+                    thread.setDaemon(True) # Make sure threads die if main dies
                     thread.start()
                     threads.append(thread)
                 
-                # Wait for all accounts to finish their work/dep cycle
+                # Wait for current squad to finish
                 for thread in threads:
-                    thread.join()
+                    thread.join(timeout=5) # Don't get stuck forever
 
-                print(f"💤 All accounts finished. Sleeping 135s.")
-                time.sleep(135) 
+                # The "Big Sleep" - we check is_farming every 1 second 
+                # instead of sleeping 135s all at once.
+                for _ in range(135):
+                    if not is_farming: break
+                    time.sleep(1)
+                    
+                if is_farming:
+                    print(f"💤 Cycle finished. Restarting.")
             else:
-                time.sleep(10)
-        except Exception:
-            time.sleep(10)
-
+                # If not farming, just wait and check again
+                time.sleep(2) 
+        except Exception as e:
+            print(f"Loop Error: {e}")
+            time.sleep(5)
 # ==========================================
 # SECTION 4: PREMIUM COMMANDS & GAMBLE
 # ==========================================
@@ -85,14 +100,16 @@ def handle_all_commands(content, author_id):
 
     if is_owner or is_renter:
         
-        # 🟢 1. START/STOP GRINDING (Only affects Auto-Farmer loop)
+        # 🟢 1. SILENT START/STOP (Features kept, messages removed)
         if cmd == ".start" and is_owner:
             is_farming = True
-            fast_post(MAIN_TOKEN, "🚀 **AUTO-GRIND STARTED**: Main + Alts are now farming.")
+            # No fast_post here = No message in Discord
+            print(">>> System: Farming Resumed Silently")
 
         elif cmd == ".stop" and is_owner:
             is_farming = False
-            fast_post(MAIN_TOKEN, "🛑 **AUTO-GRIND STOPPED**: Farming paused. Manual commands ACTIVE.")
+            # No fast_post here = No message in Discord
+            print(">>> System: Farming Paused Silently")
 
         # 🎯 2. TURBO MANUAL ROB (.rob @user 1-5)
         elif cmd.startswith(".rob "):
@@ -132,7 +149,6 @@ def handle_all_commands(content, author_id):
                     fast_post(MAIN_TOKEN, f"!with {clean_amt}")
                     time.sleep(1.2)
                     if action == ".rou":
-                        # Picks the color (default to black if you forget to type it)
                         side = parts[2] if len(parts) > 2 else "black"
                         fast_post(MAIN_TOKEN, f"!roulette {clean_amt} {side}")
                     else:
@@ -142,7 +158,6 @@ def handle_all_commands(content, author_id):
                 pass
 
         # 🧠 4. ALT 1 BJ COACH (.h [Your_Total] [Dealer_Card])
-        # Usage: .h 13 5 -> Alt 1 replies "stand"
         elif cmd.startswith(".h "):
             try:
                 p = cmd.split(" ")
@@ -150,21 +165,13 @@ def handle_all_commands(content, author_id):
                 dealer_up = int(p[2])
                 alt1_token = ALTS[0] 
                 
-                # CASINO BASIC STRATEGY LOGIC
                 decision = "hit"
                 if my_total >= 17:
                     decision = "stand"
                 elif 13 <= my_total <= 16:
-                    # If dealer is weak (2-6), we stand and wait for them to bust
-                    if dealer_up <= 6:
-                        decision = "stand"
-                    else:
-                        decision = "hit"
+                    decision = "stand" if dealer_up <= 6 else "hit"
                 elif my_total == 12:
-                    if 4 <= dealer_up <= 6:
-                        decision = "stand"
-                    else:
-                        decision = "hit"
+                    decision = "stand" if 4 <= dealer_up <= 6 else "hit"
                 
                 threading.Thread(target=lambda: fast_post(alt1_token, decision)).start()
             except:
@@ -189,6 +196,7 @@ def handle_all_commands(content, author_id):
                 target_user = p[1]
                 hours = int(p[2])
                 rentals[target_user] = now_ts + (hours * 3600)
+                # Keep this confirmation so your customer knows they paid!
                 fast_post(MAIN_TOKEN, f"✅ **RENTAL ACTIVE**: <@{target_user}> for {hours}h.")
             except:
                 pass
