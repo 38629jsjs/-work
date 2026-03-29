@@ -97,12 +97,12 @@ def handle_all_commands(content, author_id):
     is_renter = author_id in rentals and now_ts < rentals[author_id]
 
     if is_owner or is_renter:
+        alt1_token = ALTS[0] # Your Coach & Banker
         
         # 🟢 1. START/STOP GRINDING
         if cmd == ".start" and is_owner:
             if not is_farming:
                 # Alt 1 confirms receipt of the command
-                alt1_token = ALTS[0]
                 fast_post(alt1_token, "✅ **Command Received.** Farm will resume in **2 minutes**.")
                 
                 # Background thread to handle the 2-minute wait
@@ -143,7 +143,7 @@ def handle_all_commands(content, author_id):
             except:
                 pass
 
-        # 🎰 3. MAIN ACCOUNT SMART GAMBLE (.rou 7k red / .bj 5k)
+        # 🎰 3. MAIN ACCOUNT SMART GAMBLE (.rou / .bj)
         elif is_owner and (cmd.startswith(".rou ") or cmd.startswith(".bj ")):
             try:
                 parts = cmd.split(" ")
@@ -165,27 +165,69 @@ def handle_all_commands(content, author_id):
             except:
                 pass
 
-        # 🧠 4. ALT 1 BJ COACH (.h [Your_Total] [Dealer_Card])
+        # 🧠 4. PRO ALT 1 BJ COACH (.h [Total] [Dealer] [Pair y/n])
         elif cmd.startswith(".h "):
             try:
                 p = cmd.split(" ")
                 my_total = int(p[1])
                 dealer_up = int(p[2])
-                alt1_token = ALTS[0] 
+                # Check if user added 'y' for a pair
+                is_pair = p[3].lower() == "y" if len(p) > 3 else False
                 
                 decision = "hit"
-                if my_total >= 17:
-                    decision = "stand"
-                elif 13 <= my_total <= 16:
-                    decision = "stand" if dealer_up <= 6 else "hit"
-                elif my_total == 12:
-                    decision = "stand" if 4 <= dealer_up <= 6 else "hit"
+
+                # A. Split Logic (If you have a pair)
+                if is_pair:
+                    # Always split Aces (Total 2 or 12) and 8s (Total 16)
+                    if my_total in [2, 12, 16]: 
+                        decision = "split"
+                    elif my_total in [4, 6, 14] and dealer_up <= 7: 
+                        decision = "split"
+                    elif my_total == 18 and dealer_up not in [7, 10, 11]: 
+                        decision = "split"
                 
-                threading.Thread(target=lambda: fast_post(alt1_token, decision)).start()
+                # B. Double Down Logic (If not splitting)
+                if decision == "hit":
+                    if my_total == 11: 
+                        decision = "doubledown"
+                    elif my_total == 10 and dealer_up <= 9: 
+                        decision = "doubledown"
+                    elif my_total == 9 and 3 <= dealer_up <= 6: 
+                        decision = "doubledown"
+
+                # C. Stand Logic
+                if decision == "hit":
+                    if my_total >= 17:
+                        decision = "stand"
+                    elif 13 <= my_total <= 16 and dealer_up <= 6:
+                        decision = "stand"
+                    elif my_total == 12 and 4 <= dealer_up <= 6:
+                        decision = "stand"
+                
+                threading.Thread(target=lambda: fast_post(alt1_token, f"**{decision.upper()}**")).start()
             except:
                 pass
 
-        # 💰 5. UTILITY (.collect / .flex / .rent)
+        # 🏦 5. BANKER COMMANDS (.da1 / .pa1)
+        # Alt 1 Deposit All
+        elif cmd == ".da1" and is_owner:
+            threading.Thread(target=lambda: fast_post(alt1_token, "!dep all")).start()
+
+        # Alt 1 Pay Main (Usage: .pa1 500k)
+        elif cmd.startswith(".pa1 ") and is_owner:
+            try:
+                raw_val = cmd.split(" ")[1]
+                m = 1000 if "k" in raw_val else 1000000 if "m" in raw_val else 1
+                val = int(re.sub(r"[^\d]", "", raw_val)) * m
+                def alt_pay():
+                    fast_post(alt1_token, f"!with {val}")
+                    time.sleep(1.2)
+                    fast_post(alt1_token, f"!pay ayngyl1 {val}")
+                threading.Thread(target=alt_pay).start()
+            except:
+                pass
+
+        # 💰 6. UTILITY (.collect / .flex / .rent)
         elif cmd == ".collect":
             def collect_all(tk):
                 fast_post(tk, "!with all")
