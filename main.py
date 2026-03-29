@@ -164,20 +164,36 @@ def handle_all_commands(content, author_id):
             except:
                 pass
 
-        # 🧠 4. PRO ALT 1 BJ COACH (.h [Total] [Dealer] [Pair y/n])
+    # 🧠 4. PRO ALT 1 BJ COACH (.h [Total] [Dealer] [Pair y/n])
         elif cmd.startswith(".h "):
             try:
                 p = cmd.split(" ")
                 my_total = int(p[1])
                 dealer_up = int(p[2])
-                # Check if user added 'y' for a pair
                 is_pair = p[3].lower() == "y" if len(p) > 3 else False
+                alt1_token = ALTS[0] 
                 
                 decision = "hit"
+                win_prob = 40 # Default starting point
 
-                # A. Split Logic (If you have a pair)
+                # --- A. PROBABILITY CALCULATOR ---
+                if my_total >= 20: win_prob = 92
+                elif my_total == 19: win_prob = 85
+                elif my_total == 18: win_prob = 77
+                elif my_total == 11: win_prob = 66
+                elif my_total == 10: win_prob = 58
+                elif 13 <= my_total <= 16:
+                    # High risk hands: better chance if dealer is 2-6 (Bust risk)
+                    win_prob = 42 if dealer_up <= 6 else 21
+                elif my_total <= 9:
+                    win_prob = 35 # Low total, needs multiple hits
+                
+                # Bonus: Dealer showing a 4, 5, or 6 increases your win chance
+                if 4 <= dealer_up <= 6:
+                    win_prob += 10
+
+                # --- B. SPLIT LOGIC ---
                 if is_pair:
-                    # Always split Aces (Total 2 or 12) and 8s (Total 16)
                     if my_total in [2, 12, 16]: 
                         decision = "split"
                     elif my_total in [4, 6, 14] and dealer_up <= 7: 
@@ -185,7 +201,7 @@ def handle_all_commands(content, author_id):
                     elif my_total == 18 and dealer_up not in [7, 10, 11]: 
                         decision = "split"
                 
-                # B. Double Down Logic (If not splitting)
+                # --- C. DOUBLE DOWN LOGIC ---
                 if decision == "hit":
                     if my_total == 11: 
                         decision = "doubledown"
@@ -194,7 +210,7 @@ def handle_all_commands(content, author_id):
                     elif my_total == 9 and 3 <= dealer_up <= 6: 
                         decision = "doubledown"
 
-                # C. Stand Logic
+                # --- D. STAND LOGIC ---
                 if decision == "hit":
                     if my_total >= 17:
                         decision = "stand"
@@ -203,10 +219,11 @@ def handle_all_commands(content, author_id):
                     elif my_total == 12 and 4 <= dealer_up <= 6:
                         decision = "stand"
                 
-                threading.Thread(target=lambda: fast_post(alt1_token, f"**{decision.upper()}**")).start()
+                # --- E. FINAL OUTPUT ---
+                final_msg = f"**{decision.upper()}** (Win Chance: **{win_prob}%**)"
+                threading.Thread(target=lambda: fast_post(alt1_token, final_msg)).start()
             except:
                 pass
-
         # 🏦 5. BANKER COMMANDS (.da1 / .pa1)
         # Alt 1 Deposit All
         elif cmd == ".da1" and is_owner:
