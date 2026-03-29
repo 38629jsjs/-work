@@ -22,7 +22,6 @@ def fast_post(token, content):
     # Small jitter (0.1s to 0.9s) so Discord doesn't see 6 identical timestamps
     time.sleep(random.uniform(0.1, 0.9))
     requests.post(url, headers={"Authorization": token}, json={"content": content})
-
 # ==========================================
 # SECTION 2: TURBO GRINDER (PARALLEL)
 # ==========================================
