@@ -23,54 +23,91 @@ def fast_post(token, content):
     time.sleep(random.uniform(0.1, 0.9))
     requests.post(url, headers={"Authorization": token}, json={"content": content})
 # ==========================================
-# SECTION 2: TURBO GRINDER (PARALLEL)
+# SECTION 2: HYBRID RECOVERY (SPEED + SAFETY)
 # ==========================================
-def worker_task(token):
-    """The actual grind logic for a single account"""
+
+def alt_worker_task(token, run_illegal):
+    """ALTS: !slut + !crime together (Zero-Fine) -> !work -> Final Pay"""
     if not is_farming: return 
     
+    # 1. THE SIMULTANEOUS RISK (Zero-Fine Shield)
+    # Firing these together while the wallet is empty means fines = $0.
+    if run_illegal:
+        fast_post(token, "!slut")
+        fast_post(token, "!crime")
+        
+        # Wait for both risky results to process (4 seconds)
+        # We don't pay yet to keep the script fast and clean
+        time.sleep(4.0)
+
+    # 2. THE GUARANTEED INCOME (Work)
+    # Done after the risks so this money is NEVER touched by a crime fine.
     fast_post(token, "!work")
-    time.sleep(random.uniform(1.5, 2.5)) 
     
+    # Give the bot time to process the Work salary
+    time.sleep(random.uniform(2.0, 3.0))
+    
+    # 3. THE FINAL CLEARANCE
+    # Pay everything (Work + Slut + Crime winnings) in ONE transaction.
+    # This reduces spam and stays under the radar.
+    fast_post(token, f"!pay ayngyl1 all")
+
+def main_banker_task():
+    """MAIN: Only safe work and locks the vault"""
     if not is_farming: return
-    fast_post(token, "!dep all")
+    
+    # Banker only works - 100% safe
+    fast_post(MAIN_TOKEN, "!work")
+    
+    # Wait for all Alts to finish their simultaneous moves (25s total)
+    time.sleep(25)
+    
+    # Lock the total profit into the Bank
+    fast_post(MAIN_TOKEN, "!dep all")
 
 def farmer_loop():
-    # STARTUP DELAY: Wait 120s before the first ever grind starts
-    print("⏳ [SYSTEM] Script started. Waiting 120s for account recovery...")
-    for _ in range(120):
-        time.sleep(1)
-
+    print("⏳ [SYSTEM] Simultaneous Risk Engine Active. 10m CD for Risky Commands.")
+    # Initial startup delay
+    time.sleep(120) 
+    
+    cycle_count = 0
     while True:
         try:
             if is_farming:
-                FULL_SQUAD = [MAIN_TOKEN] + ALTS 
+                # 10 MINUTE COOLDOWN LOGIC:
+                # 125s cycle * 5 cycles = 10.4 minutes. Safely resets !crime/!slut.
+                run_illegal = (cycle_count % 5 == 0)
+                
                 now = datetime.now(KH_TZ).strftime('%I:%M:%S %p')
-                print(f"🚀 [{now}] --- TURBO GRIND STARTING ---")
+                mode = "🔥 FULL GRIND (Risks On)" if run_illegal else "🛡️ SAFE WORK"
+                print(f"🚀 [{now}] Cycle {cycle_count} | {mode}")
                 
                 threads = []
-                for t in FULL_SQUAD:
-                    if not is_farming: break
-                    
-                    thread = threading.Thread(target=worker_task, args=(t,))
-                    thread.daemon = True 
-                    thread.start()
-                    threads.append(thread)
+                # Start all Alts in parallel
+                for t in ALTS:
+                    th = threading.Thread(target=alt_worker_task, args=(t, run_illegal))
+                    th.start()
+                    threads.append(th)
                 
-                for thread in threads:
-                    thread.join(timeout=5)
+                # Start the Banker in parallel
+                m_th = threading.Thread(target=main_banker_task)
+                m_th.start()
+                threads.append(m_th)
+                
+                # Wait for all threads to finish their work
+                for th in threads:
+                    th.join(timeout=35)
 
-                # The "Big Sleep" - Checks for .stop every 1s
-                for _ in range(135):
+                cycle_count += 1
+                
+                # The "Big Sleep" until !work cooldown (120s)
+                for _ in range(125):
                     if not is_farming: break
                     time.sleep(1)
-                    
-                if is_farming:
-                    print(f"💤 Cycle finished. Restarting.")
             else:
-                time.sleep(1) 
+                time.sleep(1)
         except Exception as e:
-            print(f"Loop Error: {e}")
+            print(f"⚠️ Loop Error: {e}")
             time.sleep(5)
 # ==========================================
 # SECTION 4: PREMIUM COMMANDS & GAMBLE
@@ -164,63 +201,65 @@ def handle_all_commands(content, author_id):
             except:
                 pass
 
-    # 🧠 4. PRO ALT 1 BJ COACH (.h [Total] [Dealer] [Pair y/n])
+   # 🧠 4. PRO COACH (Tension + Every Probability)
+        # Usage: .h [Total] [Dealer] [Pair y/n] [CardCount]
         elif cmd.startswith(".h "):
             try:
                 p = cmd.split(" ")
-                my_total = int(p[1])
-                dealer_up = int(p[2])
-                is_pair = p[3].lower() == "y" if len(p) > 3 else False
+                my_t = int(p[1])
+                d_u = int(p[2])
+                is_p = (p[3].lower() == "y") if len(p) > 3 else False
+                count = int(p[4]) if len(p) > 4 else 2
                 alt1_token = ALTS[0] 
-                
-                decision = "hit"
-                win_prob = 40 # Default starting point
 
-                # --- A. PROBABILITY CALCULATOR ---
-                if my_total >= 20: win_prob = 92
-                elif my_total == 19: win_prob = 85
-                elif my_total == 18: win_prob = 77
-                elif my_total == 11: win_prob = 66
-                elif my_total == 10: win_prob = 58
-                elif 13 <= my_total <= 16:
-                    # High risk hands: better chance if dealer is 2-6 (Bust risk)
-                    win_prob = 42 if dealer_up <= 6 else 21
-                elif my_total <= 9:
-                    win_prob = 35 # Low total, needs multiple hits
-                
-                # Bonus: Dealer showing a 4, 5, or 6 increases your win chance
-                if 4 <= dealer_up <= 6:
-                    win_prob += 10
+                # --- 1. PROBABILITY MATRIX (Every Hand) ---
+                win = 40
+                if my_t >= 20: win = 92
+                elif my_t == 19: win = 85
+                elif my_t == 18: win = 77
+                elif my_t == 17: win = 62
+                elif my_t == 11: win = 66
+                elif my_t == 10: win = 58
+                elif my_t == 9: win = 48
+                elif 13 <= my_t <= 16:
+                    win = 42 if d_u <= 6 else 21
+                elif my_t == 12:
+                    win = 35 if d_u <= 6 else 18
+                elif my_t <= 8:
+                    win = 25
 
-                # --- B. SPLIT LOGIC ---
-                if is_pair:
-                    if my_total in [2, 12, 16]: 
-                        decision = "split"
-                    elif my_total in [4, 6, 14] and dealer_up <= 7: 
-                        decision = "split"
-                    elif my_total == 18 and dealer_up not in [7, 10, 11]: 
-                        decision = "split"
-                
-                # --- C. DOUBLE DOWN LOGIC ---
-                if decision == "hit":
-                    if my_total == 11: 
-                        decision = "doubledown"
-                    elif my_total == 10 and dealer_up <= 9: 
-                        decision = "doubledown"
-                    elif my_total == 9 and 3 <= dealer_up <= 6: 
-                        decision = "doubledown"
+                # --- 2. DECK TENSION & DEALER ADJUSTMENTS ---
+                # Tension Penalty: -8% win chance for every card drawn after the first 2
+                tension_penalty = (count - 2) * 8
+                if 4 <= d_u <= 6: win += 10  # Dealer Weak
+                if d_u >= 10: win -= 10      # Dealer Strong
+                win = max(1, min(99, win - tension_penalty))
 
-                # --- D. STAND LOGIC ---
-                if decision == "hit":
-                    if my_total >= 17:
-                        decision = "stand"
-                    elif 13 <= my_total <= 16 and dealer_up <= 6:
-                        decision = "stand"
-                    elif my_total == 12 and 4 <= dealer_up <= 6:
-                        decision = "stand"
+                # --- 3. DECISION LOGIC ---
+                decision = "HIT"
                 
-                # --- E. FINAL OUTPUT ---
-                final_msg = f"**{decision.upper()}** (Win Chance: **{win_prob}%**)"
+                # Split Logic
+                if is_p:
+                    if my_t in [2, 12, 16]: decision = "SPLIT"
+                    elif my_t in [4, 6, 14] and d_u <= 7: decision = "SPLIT"
+                    elif my_t == 18 and d_u not in [7, 10, 11]: decision = "SPLIT"
+                
+                # Double Down / Stand Logic
+                if decision == "HIT":
+                    if my_t == 11: decision = "DOUBLEDOWN"
+                    elif my_t == 10 and d_u <= 9: decision = "DOUBLEDOWN"
+                    elif my_t == 9 and 3 <= d_u <= 6: decision = "DOUBLEDOWN"
+                    
+                    if decision == "HIT":
+                        if my_t >= 17: decision = "STAND"
+                        elif 13 <= my_t <= 16 and d_u <= 6: decision = "STAND"
+                        elif my_t == 12 and 4 <= d_u <= 6: decision = "STAND"
+                        # SAFETY RULE: If Tension is high (4+ cards), Stand on 15/16
+                        if count >= 4 and 15 <= my_t <= 16: decision = "STAND"
+
+                # --- 4. OUTPUT ---
+                tension_warn = " [⚠️]" if count >= 4 else ""
+                final_msg = f"**{decision}** (Win: **{win}%**){tension_warn}"
                 threading.Thread(target=lambda: fast_post(alt1_token, final_msg)).start()
             except:
                 pass
