@@ -28,7 +28,6 @@ def fast_post(token, content):
 # ==========================================
 def worker_task(token):
     """The actual grind logic for a single account"""
-    # Check if we should still be farming before each action
     if not is_farming: return 
     
     fast_post(token, "!work")
@@ -38,8 +37,11 @@ def worker_task(token):
     fast_post(token, "!dep all")
 
 def farmer_loop():
-    time.sleep(5)
-    # Move this inside the loop so it stays fresh
+    # STARTUP DELAY: Wait 120s before the first ever grind starts
+    print("⏳ [SYSTEM] Script started. Waiting 120s for account recovery...")
+    for _ in range(120):
+        time.sleep(1)
+
     while True:
         try:
             if is_farming:
@@ -49,20 +51,17 @@ def farmer_loop():
                 
                 threads = []
                 for t in FULL_SQUAD:
-                    # If you stopped it mid-loop, don't start new threads
                     if not is_farming: break
                     
                     thread = threading.Thread(target=worker_task, args=(t,))
-                    thread.setDaemon(True) # Make sure threads die if main dies
+                    thread.daemon = True 
                     thread.start()
                     threads.append(thread)
                 
-                # Wait for current squad to finish
                 for thread in threads:
-                    thread.join(timeout=5) # Don't get stuck forever
+                    thread.join(timeout=5)
 
-                # The "Big Sleep" - we check is_farming every 1 second 
-                # instead of sleeping 135s all at once.
+                # The "Big Sleep" - Checks for .stop every 1s
                 for _ in range(135):
                     if not is_farming: break
                     time.sleep(1)
@@ -70,8 +69,7 @@ def farmer_loop():
                 if is_farming:
                     print(f"💤 Cycle finished. Restarting.")
             else:
-                # If not farming, just wait and check again
-                time.sleep(2) 
+                time.sleep(1) 
         except Exception as e:
             print(f"Loop Error: {e}")
             time.sleep(5)
@@ -100,15 +98,26 @@ def handle_all_commands(content, author_id):
 
     if is_owner or is_renter:
         
-        # 🟢 1. SILENT START/STOP (Features kept, messages removed)
+        # 🟢 1. START/STOP GRINDING
         if cmd == ".start" and is_owner:
-            is_farming = True
-            # No fast_post here = No message in Discord
-            print(">>> System: Farming Resumed Silently")
+            if not is_farming:
+                # Alt 1 confirms receipt of the command
+                alt1_token = ALTS[0]
+                fast_post(alt1_token, "✅ **Command Received.** Farm will resume in **2 minutes**.")
+                
+                # Background thread to handle the 2-minute wait
+                def delayed_start():
+                    global is_farming
+                    time.sleep(120)  # The 2-minute recovery time
+                    if is_owner: # Final check to ensure we still want to farm
+                        is_farming = True
+                        print(">>> System: 120s delay finished. Grinding now ACTIVE.")
+
+                threading.Thread(target=delayed_start).start()
 
         elif cmd == ".stop" and is_owner:
             is_farming = False
-            # No fast_post here = No message in Discord
+            # Silent stop as requested
             print(">>> System: Farming Paused Silently")
 
         # 🎯 2. TURBO MANUAL ROB (.rob @user 1-5)
@@ -141,7 +150,6 @@ def handle_all_commands(content, author_id):
                 action = parts[0]
                 raw_amt = parts[1]
                 
-                # THE CONVERTER: Handles 7k -> 7000 | 1.2m -> 1200000
                 mult = 1000 if "k" in raw_amt else 1000000 if "m" in raw_amt else 1
                 clean_amt = int(re.sub(r"[^\d]", "", raw_amt)) * mult
 
@@ -196,7 +204,6 @@ def handle_all_commands(content, author_id):
                 target_user = p[1]
                 hours = int(p[2])
                 rentals[target_user] = now_ts + (hours * 3600)
-                # Keep this confirmation so your customer knows they paid!
                 fast_post(MAIN_TOKEN, f"✅ **RENTAL ACTIVE**: <@{target_user}> for {hours}h.")
             except:
                 pass
