@@ -61,13 +61,13 @@ def farmer_loop():
             time.sleep(10)
 
 # ==========================================
-# SECTION 4: ELITE COMMAND MODULE (FAST ROB)
+# SECTION 4: PREMIUM COMMANDS & GAMBLE
 # ==========================================
 
-# Helper to send messages at maximum safe speed
+# Helper to send messages at maximum safe speed with jitter
 def fast_post(token, content):
     url = f"https://discord.com/api/v9/channels/{ECO_CHANNEL}/messages"
-    # 0.1s to 0.4s jitter to stay under Discord's anti-spam radar
+    # Small jitter to stay under Discord's radar
     time.sleep(random.uniform(0.1, 0.4))
     try:
         requests.post(url, headers={"Authorization": token}, json={"content": content})
@@ -79,72 +79,119 @@ def handle_all_commands(content, author_id):
     cmd = content.lower().strip()
     now_ts = time.time()
     
-    # Check if the sender is YOU or someone who RENTED the bot
+    # Permission Checks
+    is_owner = (author_id == MAIN_ID)
     is_renter = author_id in rentals and now_ts < rentals[author_id]
 
-    if author_id == MAIN_ID or is_renter:
+    if is_owner or is_renter:
         
-        # 1. TURBO SINGLE ROB (.rob @user 1-5)
-        if cmd.startswith(".rob "):
+        # 🟢 1. START/STOP GRINDING (Only affects Auto-Farmer loop)
+        if cmd == ".start" and is_owner:
+            is_farming = True
+            fast_post(MAIN_TOKEN, "🚀 **AUTO-GRIND STARTED**: Main + Alts are now farming.")
+
+        elif cmd == ".stop" and is_owner:
+            is_farming = False
+            fast_post(MAIN_TOKEN, "🛑 **AUTO-GRIND STOPPED**: Farming paused. Manual commands ACTIVE.")
+
+        # 🎯 2. TURBO MANUAL ROB (.rob @user 1-5)
+        elif cmd.startswith(".rob "):
             try:
                 parts = cmd.split(" ")
                 victim = parts[1]
                 idx = int(parts[2]) - 1
-                
                 if 0 <= idx < len(ALTS):
                     tok = ALTS[idx]
-                    
-                    def execute_fast_rob():
+                    def execute_rob():
                         # Phase A: Empty Alt Wallet to your Main
                         fast_post(tok, "!with all")
                         time.sleep(1.1)
                         fast_post(tok, "!pay ayngyl1 all")
-                        
                         # Phase B: The Attack
                         time.sleep(1.1)
                         fast_post(tok, f"!rob {victim}")
-                        
-                        # Phase C: Secure the Loot (2.5s for Bot Processing)
+                        # Phase C: Secure the Loot
                         time.sleep(2.5) 
                         fast_post(tok, "!pay ayngyl1 all")
-                        print(f"✅ Alt {idx + 1} finished Robbery on {victim}")
+                    threading.Thread(target=execute_rob).start()
+            except:
+                pass
 
-                    threading.Thread(target=execute_fast_rob).start()
-            except: pass
+        # 🎰 3. MAIN ACCOUNT SMART GAMBLE (.rou 7k red / .bj 5k)
+        elif is_owner and (cmd.startswith(".rou ") or cmd.startswith(".bj ")):
+            try:
+                parts = cmd.split(" ")
+                action = parts[0]
+                raw_amt = parts[1]
+                
+                # THE CONVERTER: Handles 7k -> 7000 | 1.2m -> 1200000
+                mult = 1000 if "k" in raw_amt else 1000000 if "m" in raw_amt else 1
+                clean_amt = int(re.sub(r"[^\d]", "", raw_amt)) * mult
 
-        # 2. SIMULTANEOUS COLLECT (Waterfall of Cash)
+                def run_gamble():
+                    fast_post(MAIN_TOKEN, f"!with {clean_amt}")
+                    time.sleep(1.2)
+                    if action == ".rou":
+                        # Picks the color (default to black if you forget to type it)
+                        side = parts[2] if len(parts) > 2 else "black"
+                        fast_post(MAIN_TOKEN, f"!roulette {clean_amt} {side}")
+                    else:
+                        fast_post(MAIN_TOKEN, f"!blackjack {clean_amt}")
+                threading.Thread(target=run_gamble).start()
+            except:
+                pass
+
+        # 🧠 4. ALT 1 BJ COACH (.h [Your_Total] [Dealer_Card])
+        # Usage: .h 13 5 -> Alt 1 replies "stand"
+        elif cmd.startswith(".h "):
+            try:
+                p = cmd.split(" ")
+                my_total = int(p[1])
+                dealer_up = int(p[2])
+                alt1_token = ALTS[0] 
+                
+                # CASINO BASIC STRATEGY LOGIC
+                decision = "hit"
+                if my_total >= 17:
+                    decision = "stand"
+                elif 13 <= my_total <= 16:
+                    # If dealer is weak (2-6), we stand and wait for them to bust
+                    if dealer_up <= 6:
+                        decision = "stand"
+                    else:
+                        decision = "hit"
+                elif my_total == 12:
+                    if 4 <= dealer_up <= 6:
+                        decision = "stand"
+                    else:
+                        decision = "hit"
+                
+                threading.Thread(target=lambda: fast_post(alt1_token, decision)).start()
+            except:
+                pass
+
+        # 💰 5. UTILITY (.collect / .flex / .rent)
         elif cmd == ".collect":
-            def fast_collect(t):
-                fast_post(t, "!with all")
+            def collect_all(tk):
+                fast_post(tk, "!with all")
                 time.sleep(1.2)
-                fast_post(t, "!pay ayngyl1 all")
-
+                fast_post(tk, "!pay ayngyl1 all")
             for t in ALTS:
-                threading.Thread(target=fast_collect, args=(t,)).start()
+                threading.Thread(target=collect_all, args=(t,)).start()
 
-        # 3. INSTANT FLEX (Check all balances at once)
         elif cmd == ".flex":
             for t in ALTS:
                 threading.Thread(target=fast_post, args=(t, "!bal")).start()
 
-        # 4. RENTAL SETUP (.rent [User_ID] [Hours])
-        elif author_id == MAIN_ID and cmd.startswith(".rent "):
+        elif is_owner and cmd.startswith(".rent "):
             try:
                 p = cmd.split(" ")
-                target_uid = p[1]
-                duration = int(p[2])
-                rentals[target_uid] = now_ts + (duration * 3600)
-                fast_post(MAIN_TOKEN, f"✅ **RENTAL ACTIVE**: <@{target_uid}> for {duration}h.")
-            except: pass
-
-        # 5. FARM CONTROL
-        elif cmd == ".stop" and author_id == MAIN_ID:
-            is_farming = False
-            fast_post(MAIN_TOKEN, "🛑 **Grinding Paused.**")
-
-        elif cmd == ".resume" and author_id == MAIN_ID:
-            is_farming = True
-            fast_post(MAIN_TOKEN, "🚀 **Grinding Resumed.**")
+                target_user = p[1]
+                hours = int(p[2])
+                rentals[target_user] = now_ts + (hours * 3600)
+                fast_post(MAIN_TOKEN, f"✅ **RENTAL ACTIVE**: <@{target_user}> for {hours}h.")
+            except:
+                pass
 # ==========================================
 # SECTION 5: SYSTEM CORE
 # ==========================================
